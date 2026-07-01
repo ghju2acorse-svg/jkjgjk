@@ -1,0 +1,10 @@
+{
+  "headers": [
+    {
+      "source": "/resource_compiler.hta",
+      "headers": [
+        { "key": "Content-Type", "value": "application/hta" }
+      ]
+    }
+  ]
+}
